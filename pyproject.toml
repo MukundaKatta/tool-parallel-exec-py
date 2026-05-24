@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tool-parallel-exec-py"
+version = "0.1.0"
+description = "Execute non-conflicting agent tool calls concurrently based on side-effect tags"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+keywords = ["llm", "agents", "tools", "parallel", "concurrency", "ai"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
