@@ -1,12 +1,19 @@
 import asyncio
 import time
 import pytest
-from tool_parallel_exec import ParallelExecutor, SideEffect, side_effect, get_side_effect, ToolError
+from tool_parallel_exec import (
+    ParallelExecutor,
+    SideEffect,
+    side_effect,
+    get_side_effect,
+    ToolError,
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
 
 @side_effect(SideEffect.READ)
 def read_tool(key: str) -> str:
@@ -45,6 +52,7 @@ TOOLS = {
 # side_effect decorator
 # ---------------------------------------------------------------------------
 
+
 def test_side_effect_decorator_sets_attr():
     assert get_side_effect(read_tool) == SideEffect.READ
 
@@ -64,6 +72,7 @@ def test_plain_fn_defaults_to_write():
 # ---------------------------------------------------------------------------
 # Basic execution
 # ---------------------------------------------------------------------------
+
 
 def test_single_read_call():
     ex = ParallelExecutor(TOOLS)
@@ -106,6 +115,7 @@ def test_result_name_field():
 # Parallel execution (timing)
 # ---------------------------------------------------------------------------
 
+
 @side_effect(SideEffect.READ)
 def slow_read(ms: int) -> str:
     time.sleep(ms / 1000)
@@ -129,12 +139,15 @@ def test_parallel_reads_faster_than_serial():
 # WRITE / DESTRUCTIVE serialized
 # ---------------------------------------------------------------------------
 
+
 def test_write_calls_are_executed():
     ex = ParallelExecutor(TOOLS)
-    results = ex.run([
-        {"name": "write", "args": {"data": "x"}},
-        {"name": "write", "args": {"data": "y"}},
-    ])
+    results = ex.run(
+        [
+            {"name": "write", "args": {"data": "x"}},
+            {"name": "write", "args": {"data": "y"}},
+        ]
+    )
     assert results[0]["result"] == "wrote:x"
     assert results[1]["result"] == "wrote:y"
 
@@ -149,13 +162,16 @@ def test_destructive_call_executed():
 # Mixed batch
 # ---------------------------------------------------------------------------
 
+
 def test_mixed_read_and_write():
     ex = ParallelExecutor(TOOLS)
-    results = ex.run([
-        {"name": "read", "args": {"key": "r1"}},
-        {"name": "write", "args": {"data": "w1"}},
-        {"name": "read", "args": {"key": "r2"}},
-    ])
+    results = ex.run(
+        [
+            {"name": "read", "args": {"key": "r1"}},
+            {"name": "write", "args": {"data": "w1"}},
+            {"name": "read", "args": {"key": "r2"}},
+        ]
+    )
     assert results[0]["result"] == "read:r1"
     assert results[1]["result"] == "wrote:w1"
     assert results[2]["result"] == "read:r2"
@@ -164,6 +180,7 @@ def test_mixed_read_and_write():
 # ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
+
 
 def test_unknown_tool_raises_tool_error():
     ex = ParallelExecutor(TOOLS)
@@ -189,12 +206,15 @@ def test_tool_exception_raises_tool_error():
 # Idempotent treated as parallel-safe
 # ---------------------------------------------------------------------------
 
+
 def test_idempotent_treated_as_parallel():
     ex = ParallelExecutor(TOOLS)
-    results = ex.run([
-        {"name": "idempotent", "args": {"value": 3}},
-        {"name": "idempotent", "args": {"value": 5}},
-    ])
+    results = ex.run(
+        [
+            {"name": "idempotent", "args": {"value": 3}},
+            {"name": "idempotent", "args": {"value": 5}},
+        ]
+    )
     assert results[0]["result"] == 6
     assert results[1]["result"] == 10
 
@@ -202,6 +222,7 @@ def test_idempotent_treated_as_parallel():
 # ---------------------------------------------------------------------------
 # Async interface
 # ---------------------------------------------------------------------------
+
 
 def test_async_run_single_call():
     ex = ParallelExecutor(TOOLS)
@@ -226,11 +247,42 @@ def test_async_run_multiple_reads():
     ex = ParallelExecutor(TOOLS)
 
     async def _run():
-        return await ex.async_run([
-            {"name": "read", "args": {"key": "a"}},
-            {"name": "read", "args": {"key": "b"}},
-        ])
+        return await ex.async_run(
+            [
+                {"name": "read", "args": {"key": "a"}},
+                {"name": "read", "args": {"key": "b"}},
+            ]
+        )
 
     results = asyncio.run(_run())
     assert results[0]["result"] == "read:a"
     assert results[1]["result"] == "read:b"
+
+
+def test_async_run_mixed_read_and_write_preserves_order():
+    ex = ParallelExecutor(TOOLS)
+
+    async def _run():
+        return await ex.async_run(
+            [
+                {"name": "read", "args": {"key": "r1"}},
+                {"name": "write", "args": {"data": "w1"}},
+                {"name": "delete", "args": {"item": "d1"}},
+            ]
+        )
+
+    results = asyncio.run(_run())
+    assert results[0]["result"] == "read:r1"
+    assert results[1]["result"] == "wrote:w1"
+    assert results[2]["result"] == "deleted:d1"
+
+
+def test_async_run_unknown_tool_raises_tool_error():
+    ex = ParallelExecutor(TOOLS)
+
+    async def _run():
+        return await ex.async_run([{"name": "nonexistent", "args": {}}])
+
+    with pytest.raises(ToolError) as exc_info:
+        asyncio.run(_run())
+    assert "nonexistent" in str(exc_info.value)

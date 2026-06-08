@@ -25,12 +25,15 @@ _PARALLEL_SAFE = {SideEffect.READ, SideEffect.IDEMPOTENT}
 
 def side_effect(effect: SideEffect) -> Callable:
     """Decorator that tags a tool function with its side-effect level."""
+
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             return fn(*args, **kwargs)
+
         setattr(wrapper, _SIDE_EFFECT_ATTR, effect)
         return wrapper
+
     return decorator
 
 
@@ -41,6 +44,7 @@ def get_side_effect(fn: Callable) -> SideEffect:
 
 class ToolError(Exception):
     """Wraps an exception raised by a tool during execution."""
+
     def __init__(self, tool_name: str, original: Exception) -> None:
         self.tool_name = tool_name
         self.original = original
@@ -93,10 +97,11 @@ class ParallelExecutor:
 
         # Run parallel-safe batch concurrently
         if parallel_batch:
-            with ThreadPoolExecutor(max_workers=min(self._max_workers, len(parallel_batch))) as pool:
+            with ThreadPoolExecutor(
+                max_workers=min(self._max_workers, len(parallel_batch))
+            ) as pool:
                 future_to_idx = {
-                    pool.submit(self._call, tc): i
-                    for i, tc in parallel_batch
+                    pool.submit(self._call, tc): i for i, tc in parallel_batch
                 }
                 for future in as_completed(future_to_idx):
                     idx = future_to_idx[future]
@@ -117,7 +122,7 @@ class ParallelExecutor:
         if not tool_calls:
             return []
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         indexed = list(enumerate(tool_calls))
         parallel_batch = [(i, tc) for i, tc in indexed if self._is_parallel_safe(tc)]
         serial_batch = [(i, tc) for i, tc in indexed if not self._is_parallel_safe(tc)]
@@ -126,8 +131,7 @@ class ParallelExecutor:
 
         if parallel_batch:
             coros = [
-                loop.run_in_executor(None, self._call, tc)
-                for _, tc in parallel_batch
+                loop.run_in_executor(None, self._call, tc) for _, tc in parallel_batch
             ]
             for (i, _), result in zip(parallel_batch, await asyncio.gather(*coros)):
                 results[i] = result
